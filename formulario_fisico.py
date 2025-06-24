@@ -1,168 +1,100 @@
 import streamlit as st
-import pyodbc
 from datetime import date
+import gspread
+import pandas as pd
+from oauth2client.service_account import ServiceAccountCredentials
 
-# Conexión a SQL Server
-conn = pyodbc.connect(
-    'DRIVER={ODBC Driver 17 for SQL Server};'
-    'SERVER=DESKTOP-EDB1FCU\\SQLEXPRESS;'
-    'DATABASE=PLAYERSDATA;'
-    'Trusted_Connection=yes;'
-)
-cursor = conn.cursor()
+# Autenticación con Google Sheets desde Streamlit secrets
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+creds_dict = st.secrets["gspread"]
+creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+client = gspread.authorize(creds)
+
+# Abrir la hoja de cálculo por nombre
+spreadsheet = client.open("EvaluacionesFisicas")  # Nombre del Google Sheet
+worksheet = spreadsheet.worksheet("EvaluacionesFisicas")  # Nombre de la pestaña
+
+# Cargar datos en DataFrame
+df = pd.DataFrame(worksheet.get_all_records())
 
 # Título
 st.title("Ingreso de Evaluaciones Físicas")
 
 # Filtro por categoría de origen
-cursor.execute("SELECT DISTINCT categoria_origen FROM Jugadores")
-categorias = [row[0] for row in cursor.fetchall()]
+categorias = sorted(df['categoria_origen'].unique())
 categoria_seleccionada = st.selectbox("Seleccionar categoría", categorias)
 
 # Filtrar jugadores por categoría
-cursor.execute("SELECT jugador_id, jugador_nombre FROM Jugadores WHERE categoria_origen = ?", (categoria_seleccionada,))
-jugadores = cursor.fetchall()
-jugador_dict = {f"{nombre} (ID: {id})": id for id, nombre in jugadores}
+df_filtrado = df[df['categoria_origen'] == categoria_seleccionada]
+jugador_dict = {f"{row['jugador_nombre']} (ID: {row['jugador_id']})": row['jugador_id'] for _, row in df_filtrado.iterrows()}
 jugador_seleccionado = st.selectbox("Seleccionar jugador", list(jugador_dict.keys()))
 
 # Fecha de evaluación
 fecha_eval = st.date_input("Fecha de evaluación", value=date.today())
 
-# Verificar si ya existe una evaluación para ese jugador en esa fecha
-cursor.execute("""
-    SELECT COUNT(*) FROM EvaluacionesFisicas 
-    WHERE jugador_id = ? AND fecha_evaluacion = ?
-""", (jugador_dict[jugador_seleccionado], fecha_eval))
-existe = cursor.fetchone()[0]
+# Buscar si existe fila para jugador y fecha
+def obtener_fila(jugador_id, fecha):
+    for i, fila in enumerate(df.to_dict(orient='records')):
+        if fila['jugador_id'] == jugador_id and fila['fecha_evaluacion'] == fecha.strftime("%Y-%m-%d"):
+            return i + 2  # por encabezado
+    return None
 
-# Si no existe, insertar evaluación vacía
-if not existe:
-    cursor.execute("""
-        INSERT INTO EvaluacionesFisicas (
-            jugador_id, fecha_evaluacion
-        ) VALUES (?, ?)
-    """, (jugador_dict[jugador_seleccionado], fecha_eval))
-    conn.commit()
+# Insertar nueva fila si no existe
+jugador_id = jugador_dict[jugador_seleccionado]
+fila_idx = obtener_fila(jugador_id, fecha_eval)
+if fila_idx is None:
+    nueva_fila = {
+        'jugador_id': jugador_id,
+        'jugador_nombre': jugador_seleccionado.split(" (ID")[0],
+        'categoria_origen': categoria_seleccionada,
+        'fecha_evaluacion': fecha_eval.strftime("%Y-%m-%d"),
+        'suma_pliegues': 0, 'salto_horizontal': 0, 'cmj': 0,
+        'sprint_10_mts_seg': 0, 'sprint_20_mts_seg': 0, 'sprint_30_mts_seg': 0,
+        'agilidad_505': 0, 'vel_lanzada': 0, 'vo2_max': 0,
+        'pt_musculo': 0, 'pt_grasa': 0, 'comentario': ""
+    }
+    worksheet.append_row(list(nueva_fila.values()))
+    df = pd.concat([df, pd.DataFrame([nueva_fila])], ignore_index=True)
+    fila_idx = obtener_fila(jugador_id, fecha_eval)
 
-# Obtener valores existentes
-cursor.execute("""
-    SELECT suma_pliegues, salto_horizontal, cmj, sprint_10_mts_seg, sprint_20_mts_seg,
-           sprint_30_mts_seg, agilidad_505, vel_lanzada, vo2_max, pt_musculo, pt_grasa, comentario
-    FROM EvaluacionesFisicas
-    WHERE jugador_id = ? AND fecha_evaluacion = ?
-""", (jugador_dict[jugador_seleccionado], fecha_eval))
-valores = cursor.fetchone()
+# Función para actualizar campo
+def actualizar_valor(columna, valor):
+    col_idx = df.columns.get_loc(columna) + 1
+    worksheet.update_cell(fila_idx, col_idx, valor)
 
-# Crear variables con valores precargados
-(
-    valor_suma_pliegues, valor_salto_horizontal, valor_cmj,
-    valor_sprint10, valor_sprint20, valor_sprint30,
-    valor_agilidad, valor_vel_lanzada, valor_vo2,
-    valor_pt_musculo, valor_pt_grasa, valor_comentario
-) = valores if valores else (None,) * 12
+# Obtener valores actuales
+fila_actual = df.iloc[fila_idx - 2]  # -2 por encabezado y 0 index
 
-# Inputs con valores precargados y botones por campo
-suma_pliegues = st.number_input("Suma de pliegues", min_value=0.0, value=valor_suma_pliegues or 0.0)
-if st.button("💾 Guardar suma de pliegues"):
-    cursor.execute("""
-        UPDATE EvaluacionesFisicas SET suma_pliegues = ?
-        WHERE jugador_id = ? AND fecha_evaluacion = ?
-    """, (suma_pliegues, jugador_dict[jugador_seleccionado], fecha_eval))
-    conn.commit()
-    st.success("✅ Suma de pliegues guardada.")
+# Campos a ingresar
+campos = [
+    ("suma_pliegues", "Suma de pliegues"),
+    ("salto_horizontal", "Salto horizontal (cm)"),
+    ("cmj", "CMJ (cm)"),
+    ("sprint_10_mts_seg", "Sprint 10 mts (seg)"),
+    ("sprint_20_mts_seg", "Sprint 20 mts (seg)"),
+    ("sprint_30_mts_seg", "Sprint 30 mts (seg)"),
+    ("agilidad_505", "Agilidad 5-0-5 (seg)"),
+    ("vel_lanzada", "Vel. lanzada (km/h)"),
+    ("vo2_max", "VO2 Max"),
+    ("pt_musculo", "% Músculo"),
+    ("pt_grasa", "% Grasa")
+]
 
-salto_horizontal = st.number_input("Salto horizontal (cm)", min_value=0.0, value=valor_salto_horizontal or 0.0)
-if st.button("💾 Guardar salto horizontal"):
-    cursor.execute("UPDATE EvaluacionesFisicas SET salto_horizontal = ? WHERE jugador_id = ? AND fecha_evaluacion = ?",
-                   (salto_horizontal, jugador_dict[jugador_seleccionado], fecha_eval))
-    conn.commit()
-    st.success("✅ Salto horizontal guardado.")
+for campo, etiqueta in campos:
+    valor = st.number_input(etiqueta, min_value=0.0, value=float(fila_actual[campo]))
+    if st.button(f"💾 Guardar {etiqueta}"):
+        actualizar_valor(campo, valor)
+        st.success(f"✅ {etiqueta} guardado.")
 
-cmj = st.number_input("CMJ (cm)", min_value=0.0, value=valor_cmj or 0.0)
-if st.button("💾 Guardar CMJ"):
-    cursor.execute("UPDATE EvaluacionesFisicas SET cmj = ? WHERE jugador_id = ? AND fecha_evaluacion = ?",
-                   (cmj, jugador_dict[jugador_seleccionado], fecha_eval))
-    conn.commit()
-    st.success("✅ CMJ guardado.")
-
-sprint10 = st.number_input("Sprint 10 mts (seg)", min_value=0.0, value=valor_sprint10 or 0.0)
-if st.button("💾 Guardar Sprint 10m"):
-    cursor.execute("UPDATE EvaluacionesFisicas SET sprint_10_mts_seg = ? WHERE jugador_id = ? AND fecha_evaluacion = ?",
-                   (sprint10, jugador_dict[jugador_seleccionado], fecha_eval))
-    conn.commit()
-    st.success("✅ Sprint 10m guardado.")
-
-sprint20 = st.number_input("Sprint 20 mts (seg)", min_value=0.0, value=valor_sprint20 or 0.0)
-if st.button("💾 Guardar Sprint 20m"):
-    cursor.execute("UPDATE EvaluacionesFisicas SET sprint_20_mts_seg = ? WHERE jugador_id = ? AND fecha_evaluacion = ?",
-                   (sprint20, jugador_dict[jugador_seleccionado], fecha_eval))
-    conn.commit()
-    st.success("✅ Sprint 20m guardado.")
-
-sprint30 = st.number_input("Sprint 30 mts (seg)", min_value=0.0, value=valor_sprint30 or 0.0)
-if st.button("💾 Guardar Sprint 30m"):
-    cursor.execute("UPDATE EvaluacionesFisicas SET sprint_30_mts_seg = ? WHERE jugador_id = ? AND fecha_evaluacion = ?",
-                   (sprint30, jugador_dict[jugador_seleccionado], fecha_eval))
-    conn.commit()
-    st.success("✅ Sprint 30m guardado.")
-
-agilidad = st.number_input("Agilidad 5-0-5 (seg)", min_value=0.0, value=valor_agilidad or 0.0)
-if st.button("💾 Guardar Agilidad"):
-    cursor.execute("UPDATE EvaluacionesFisicas SET agilidad_505 = ? WHERE jugador_id = ? AND fecha_evaluacion = ?",
-                   (agilidad, jugador_dict[jugador_seleccionado], fecha_eval))
-    conn.commit()
-    st.success("✅ Agilidad guardada.")
-
-vel_lanzada = st.number_input("Vel. lanzada (km/h)", min_value=0.0, value=valor_vel_lanzada or 0.0)
-if st.button("💾 Guardar Vel. lanzada"):
-    cursor.execute("UPDATE EvaluacionesFisicas SET vel_lanzada = ? WHERE jugador_id = ? AND fecha_evaluacion = ?",
-                   (vel_lanzada, jugador_dict[jugador_seleccionado], fecha_eval))
-    conn.commit()
-    st.success("✅ Vel. lanzada guardada.")
-
-vo2 = st.number_input("VO2 Max", min_value=0.0, value=valor_vo2 or 0.0)
-if st.button("💾 Guardar VO2 Max"):
-    cursor.execute("UPDATE EvaluacionesFisicas SET vo2_max = ? WHERE jugador_id = ? AND fecha_evaluacion = ?",
-                   (vo2, jugador_dict[jugador_seleccionado], fecha_eval))
-    conn.commit()
-    st.success("✅ VO2 Max guardado.")
-
-pt_musculo = st.number_input("% Músculo", min_value=0.0, value=valor_pt_musculo or 0.0)
-if st.button("💾 Guardar % Músculo"):
-    cursor.execute("UPDATE EvaluacionesFisicas SET pt_musculo = ? WHERE jugador_id = ? AND fecha_evaluacion = ?",
-                   (pt_musculo, jugador_dict[jugador_seleccionado], fecha_eval))
-    conn.commit()
-    st.success("✅ % Músculo guardado.")
-
-pt_grasa = st.number_input("% Grasa", min_value=0.0, value=valor_pt_grasa or 0.0)
-if st.button("💾 Guardar % Grasa"):
-    cursor.execute("UPDATE EvaluacionesFisicas SET pt_grasa = ? WHERE jugador_id = ? AND fecha_evaluacion = ?",
-                   (pt_grasa, jugador_dict[jugador_seleccionado], fecha_eval))
-    conn.commit()
-    st.success("✅ % Grasa guardado.")
-
-comentario = st.text_area("Comentario (opcional)", value=valor_comentario or "")
+# Comentario
+comentario = st.text_area("Comentario (opcional)", value=fila_actual['comentario'])
 if st.button("💾 Guardar Comentario"):
-    cursor.execute("UPDATE EvaluacionesFisicas SET comentario = ? WHERE jugador_id = ? AND fecha_evaluacion = ?",
-                   (comentario, jugador_dict[jugador_seleccionado], fecha_eval))
-    conn.commit()
+    actualizar_valor("comentario", comentario)
     st.success("✅ Comentario guardado.")
 
-# Botón para guardar todo junto
+# Guardar todo junto
 if st.button("📤 Guardar evaluación completa"):
-    cursor.execute("""
-        UPDATE EvaluacionesFisicas SET
-            suma_pliegues = ?, salto_horizontal = ?, cmj = ?,
-            sprint_10_mts_seg = ?, sprint_20_mts_seg = ?, sprint_30_mts_seg = ?,
-            agilidad_505 = ?, vel_lanzada = ?, vo2_max = ?,
-            pt_musculo = ?, pt_grasa = ?, comentario = ?
-        WHERE jugador_id = ? AND fecha_evaluacion = ?
-    """, (
-        suma_pliegues, salto_horizontal, cmj,
-        sprint10, sprint20, sprint30,
-        agilidad, vel_lanzada, vo2,
-        pt_musculo, pt_grasa, comentario,
-        jugador_dict[jugador_seleccionado], fecha_eval
-    ))
-    conn.commit()
+    for campo, _ in campos:
+        actualizar_valor(campo, float(locals()[campo]))
+    actualizar_valor("comentario", comentario)
     st.success("📤 Evaluación completa guardada exitosamente.")
