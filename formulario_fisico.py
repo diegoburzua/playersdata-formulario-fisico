@@ -4,68 +4,72 @@ import gspread
 import pandas as pd
 from oauth2client.service_account import ServiceAccountCredentials
 
-# Autenticación con Google Sheets desde Streamlit secrets
+# Autenticación
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 creds_dict = st.secrets["gspread"]
 creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
 client = gspread.authorize(creds)
 
-# Abrir hoja de cálculo y pestañas
-spreadsheet = client.open_by_key("1T9lH0MNDQOJACChmK40DslErSkwJBSNSB-RvAFtb2TY")
-worksheet_eval = spreadsheet.worksheet("EvaluacionesFisicas")
-worksheet_jug = spreadsheet.worksheet("Jugadores")
+# ID de tu Google Sheets
+SPREADSHEET_KEY = "1T9lH0MNDQOJACChmK40DslErSkwJBSNSB-RvAFtb2TY"
+spreadsheet = client.open_by_key(SPREADSHEET_KEY)
 
-# Cargar datos
-df_eval = pd.DataFrame(worksheet_eval.get_all_records())
-df_jug = pd.DataFrame(worksheet_jug.get_all_records())
+# Cargar hojas
+hoja_jugadores = spreadsheet.worksheet("Jugadores")
+hoja_eval = spreadsheet.worksheet("EvaluacionesFisicas")
+
+# Convertir a DataFrames
+df_jugadores = pd.DataFrame(hoja_jugadores.get_all_records())
+df_eval = pd.DataFrame(hoja_eval.get_all_records())
 
 # Título
 st.title("Ingreso de Evaluaciones Físicas")
 
 # Filtro por categoría
-categorias = sorted(df_jug['categoria_origen'].unique())
-categoria_seleccionada = st.selectbox("Seleccionar categoría", categorias)
+categorias = sorted(df_jugadores['categoria_origen'].unique())
+categoria_sel = st.selectbox("Seleccionar categoría", categorias)
 
-# Filtrar jugadores por categoría
-df_filtrado = df_jug[df_jug['categoria_origen'] == categoria_seleccionada]
-jugador_dict = {f"{row['jugador_nombre']} (ID: {row['jugador_id']})": row['jugador_id'] for _, row in df_filtrado.iterrows()}
-jugador_seleccionado = st.selectbox("Seleccionar jugador", list(jugador_dict.keys()))
+# Jugadores de esa categoría
+df_cat = df_jugadores[df_jugadores['categoria_origen'] == categoria_sel]
+jugadores_dict = {f"{row['jugador_nombre']} (ID: {row['jugador_id']})": row['jugador_id'] for _, row in df_cat.iterrows()}
+jugador_sel = st.selectbox("Seleccionar jugador", list(jugadores_dict.keys()))
+jugador_id = jugadores_dict[jugador_sel]
 
-# Fecha de evaluación
+# Fecha
 fecha_eval = st.date_input("Fecha de evaluación", value=date.today())
 
-# Buscar fila existente en EvaluacionesFisicas
+# Buscar fila existente
 def obtener_fila(jugador_id, fecha):
     for i, fila in enumerate(df_eval.to_dict(orient='records')):
         if fila['jugador_id'] == jugador_id and fila['fecha_evaluacion'] == fecha.strftime("%Y-%m-%d"):
-            return i + 2  # offset por encabezado
+            return i + 2  # +2 por encabezado y 1-indexing
     return None
 
-# Insertar nueva fila si no existe
-jugador_id = jugador_dict[jugador_seleccionado]
+# Insertar fila nueva si no existe
 fila_idx = obtener_fila(jugador_id, fecha_eval)
 if fila_idx is None:
     nueva_fila = {
         'jugador_id': jugador_id,
         'fecha_evaluacion': fecha_eval.strftime("%Y-%m-%d"),
-        'talla': 0, 'suma_pliegues': 0, 'salto_horizontal': 0, 'cmj': 0,
+        'talla': 0,
+        'suma_pliegues': 0, 'salto_horizontal': 0, 'cmj': 0,
         'sprint_10_mts_seg': 0, 'sprint_20_mts_seg': 0, 'sprint_30_mts_seg': 0,
         'agilidad_505': 0, 'vel_lanzada': 0, 'vo2_max': 0,
         'pt_musculo': 0, 'pt_grasa': 0, 'comentario': ""
     }
-    worksheet_eval.append_row(list(nueva_fila.values()))
+    hoja_eval.append_row(list(nueva_fila.values()))
     df_eval = pd.concat([df_eval, pd.DataFrame([nueva_fila])], ignore_index=True)
     fila_idx = obtener_fila(jugador_id, fecha_eval)
 
-# Función para actualizar celda
+# Función para actualizar un valor
 def actualizar_valor(columna, valor):
     col_idx = df_eval.columns.get_loc(columna) + 1
-    worksheet_eval.update_cell(fila_idx, col_idx, valor)
+    hoja_eval.update_cell(fila_idx, col_idx, valor)
 
 # Obtener fila actual
 fila_actual = df_eval.iloc[fila_idx - 2]
 
-# Campos de ingreso
+# Campos físicos
 campos = [
     ("talla", "Talla (cm)"),
     ("suma_pliegues", "Suma de pliegues"),
