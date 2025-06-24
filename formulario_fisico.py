@@ -1,4 +1,4 @@
-import streamlit as st
+import streamlit as st 
 from datetime import date
 import gspread
 import pandas as pd
@@ -10,8 +10,8 @@ creds_dict = st.secrets["gspread"]
 creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
 client = gspread.authorize(creds)
 
-# Abrir la hoja de cálculo por nombre
-spreadsheet = client.open("EvaluacionesFisicas")  # Nombre del Google Sheet
+# Usar el ID del Google Sheet directamente
+spreadsheet = client.open_by_key("1T9lH0MNDQOJACChmK40DslErSkwJBSNSB-RvAFtb2TY")  # 🔁 Reemplaza TU_ID_AQUI por el ID real
 worksheet = spreadsheet.worksheet("EvaluacionesFisicas")  # Nombre de la pestaña
 
 # Cargar datos en DataFrame
