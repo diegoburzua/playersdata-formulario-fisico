@@ -1,2 +1,4 @@
 streamlit
 pyodbc
+gspread
+oauth2client
