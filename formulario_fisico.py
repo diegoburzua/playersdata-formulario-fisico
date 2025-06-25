@@ -49,7 +49,10 @@ etiquetas = {
 
 # UI
 st.title("Ingreso de Evaluaciones Físicas")
-tipo_test = st.selectbox("Selecciona el tipo de test", list(tests_dict.keys()))
+tipo_test = st.selectbox("Selecciona el bloque de test", list(tests_dict.keys()))
+tests_disponibles = tests_dict[tipo_test]
+test_seleccionado = st.selectbox("Selecciona el test a realizar", tests_disponibles, format_func=lambda x: etiquetas[x])
+
 categoria_sel = st.selectbox("Selecciona la categoría", sorted(df_jugadores["categoria_origen"].unique()))
 df_cat = df_jugadores[df_jugadores["categoria_origen"] == categoria_sel]
 
@@ -90,8 +93,7 @@ fecha_hoy = date.today()
 for nombre in jugadores_sel:
     jugador_id = jugadores_dict[nombre]
     st.subheader(f"{nombre}")
-    for campo in tests_dict[tipo_test]:
-        valor = st.number_input(f"{etiquetas[campo]}", min_value=0.0, key=f"{jugador_id}_{campo}")
-        if st.button(f"💾 Guardar {etiquetas[campo]}", key=f"guardar_{jugador_id}_{campo}"):
-            actualizar_valor(jugador_id, campo, valor, fecha_hoy)
-            st.success(f"✅ {etiquetas[campo]} guardado para {nombre}.")
+    valor = st.number_input(f"{etiquetas[test_seleccionado]}", min_value=0.0, key=f"{jugador_id}_{test_seleccionado}")
+    if st.button(f"💾 Guardar {etiquetas[test_seleccionado]}", key=f"guardar_{jugador_id}_{test_seleccionado}"):
+        actualizar_valor(jugador_id, test_seleccionado, valor, fecha_hoy)
+        st.success(f"✅ {etiquetas[test_seleccionado]} guardado para {nombre}.")
