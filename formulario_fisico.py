@@ -16,93 +16,109 @@ spreadsheet = client.open_by_key(SPREADSHEET_KEY)
 hoja_jugadores = spreadsheet.worksheet("Jugadores")
 hoja_eval = spreadsheet.worksheet("EvaluacionesFisicas")
 
-# Cargar DataFrames
+# DataFrames
 df_jugadores = pd.DataFrame(hoja_jugadores.get_all_records())
 df_jugadores.columns = df_jugadores.columns.str.strip().str.lower().str.replace(" ", "_")
 
-records_eval = hoja_eval.get_all_records()
-df_eval = pd.DataFrame(records_eval)
-if not df_eval.empty:
-    df_eval.columns = df_eval.columns.astype(str).str.strip().str.lower().str.replace(" ", "_")
-else:
+df_eval = pd.DataFrame(hoja_eval.get_all_records())
+if df_eval.empty:
     df_eval = pd.DataFrame(columns=[
         'jugador_id', 'fecha_evaluacion', 'talla', 'suma_pliegues', 'salto_horizontal', 'cmj',
         'sprint_10_mts_seg', 'sprint_20_mts_seg', 'sprint_30_mts_seg',
         'agilidad_505', 'vel_lanzada', 'vo2_max', 'pt_musculo', 'pt_grasa', 'comentario'
     ])
-
-# Segmentos de test
-tests_composicion = ['talla', 'pt_musculo', 'pt_grasa', 'suma_pliegues']
-tests_fisicos = ['salto_horizontal', 'cmj', 'sprint_10_mts_seg', 'sprint_20_mts_seg', 'sprint_30_mts_seg', 'agilidad_505', 'vel_lanzada', 'vo2_max']
-
-tests_dict = {
-    "Test de Composición Corporal": tests_composicion,
-    "Test Físicos": tests_fisicos
-}
-
-etiquetas = {
-    "talla": "Talla (cm)", "pt_musculo": "% Músculo", "pt_grasa": "% Grasa", "suma_pliegues": "Suma pliegues",
-    "salto_horizontal": "Salto horizontal (cm)", "cmj": "CMJ (cm)",
-    "sprint_10_mts_seg": "Sprint 10 mts (seg)", "sprint_20_mts_seg": "Sprint 20 mts (seg)", "sprint_30_mts_seg": "Sprint 30 mts (seg)",
-    "agilidad_505": "Agilidad 5-0-5 (seg)", "vel_lanzada": "Velocidad lanzada (km/h)", "vo2_max": "VO2 Máx"
-}
-
-# UI
-st.title("Ingreso de Evaluaciones Físicas")
-tipo_test = st.selectbox("Selecciona el bloque de test", list(tests_dict.keys()))
-tests_disponibles = tests_dict[tipo_test]
-test_seleccionado = st.selectbox("Selecciona el test a realizar", tests_disponibles, format_func=lambda x: etiquetas[x])
-
-# Filtro de búsqueda por categoría (no restringe la selección)
-st.markdown("### Buscar jugadores por categoría (opcional)")
-categorias = sorted(df_jugadores["categoria_origen"].unique())
-categoria_filtro = st.selectbox("Filtrar jugadores para facilitar la búsqueda", ["Todas"] + categorias)
-
-if categoria_filtro != "Todas":
-    sugeridos = df_jugadores[df_jugadores["categoria_origen"] == categoria_filtro]
 else:
-    sugeridos = df_jugadores
+    df_eval.columns = df_eval.columns.str.strip().str.lower().str.replace(" ", "_")
 
-# Multiselect con todos los jugadores disponibles
-jugadores_dict = {f"{row['jugador_nombre']} (ID: {row['jugador_id']}) [{row['categoria_origen']}]": row['jugador_id'] for _, row in df_jugadores.iterrows()}
+# Configuración
+st.title("Ingreso de Evaluaciones Físicas")
 
-jugadores_sel = st.multiselect("Selecciona los jugadores para este test", jugadores_dict.keys())
-
-# Funciones
-def obtener_fila(jugador_id, fecha):
-    for i, fila in enumerate(df_eval.to_dict(orient='records')):
-        if fila['jugador_id'] == jugador_id and fila['fecha_evaluacion'] == fecha.strftime("%Y-%m-%d"):
-            return i + 2
-    return None
-
-def crear_fila_vacia(jugador_id, fecha):
-    nueva_fila = {
-        'jugador_id': jugador_id,
-        'fecha_evaluacion': fecha.strftime("%Y-%m-%d"),
-        'talla': "", 'suma_pliegues': "", 'salto_horizontal': "", 'cmj': "",
-        'sprint_10_mts_seg': "", 'sprint_20_mts_seg': "", 'sprint_30_mts_seg': "",
-        'agilidad_505': "", 'vel_lanzada': "", 'vo2_max': "",
-        'pt_musculo': "", 'pt_grasa': "", 'comentario': ""
+# Bloques de test
+tests_por_bloque = {
+    "Test de Composición Corporal": {
+        "Talla (cm)": "talla",
+        "% Músculo": "pt_musculo",
+        "% Grasa": "pt_grasa",
+        "Suma pliegues": "suma_pliegues"
+    },
+    "Test Físicos": {
+        "Salto Horizontal (cm)": "salto_horizontal",
+        "CMJ (cm)": "cmj",
+        "Sprint 10 mts (seg)": "sprint_10_mts_seg",
+        "Sprint 20 mts (seg)": "sprint_20_mts_seg",
+        "Sprint 30 mts (seg)": "sprint_30_mts_seg",
+        "Agilidad 5-0-5 (seg)": "agilidad_505",
+        "Vel. Lanzada (km/h)": "vel_lanzada",
+        "VO2 Max": "vo2_max"
     }
-    hoja_eval.append_row(list(nueva_fila.values()))
-    global df_eval
-    df_eval = pd.DataFrame(hoja_eval.get_all_records())
-    df_eval.columns = df_eval.columns.astype(str).str.strip().str.lower().str.replace(" ", "_")
-    return len(hoja_eval.get_all_values())
+}
 
-def actualizar_valor(jugador_id, columna, valor, fecha):
-    fila_idx = obtener_fila(jugador_id, fecha)
-    if fila_idx is None:
-        fila_idx = crear_fila_vacia(jugador_id, fecha)
-    col_idx = df_eval.columns.get_loc(columna) + 1
-    hoja_eval.update_cell(fila_idx, col_idx, valor)
+# Selección del bloque y test
+bloque_sel = st.selectbox("Selecciona el bloque de test", list(tests_por_bloque.keys()))
+test_opciones = tests_por_bloque[bloque_sel]
+test_etiqueta = st.selectbox("Selecciona el test a realizar", list(test_opciones.keys()))
+test_columna = test_opciones[test_etiqueta]
 
-# Formulario por jugador
-fecha_hoy = date.today()
-for nombre in jugadores_sel:
-    jugador_id = jugadores_dict[nombre]
-    st.subheader(f"{nombre}")
-    valor = st.number_input(f"{etiquetas[test_seleccionado]}", min_value=0.0, key=f"{jugador_id}_{test_seleccionado}")
-    if st.button(f"💾 Guardar {etiquetas[test_seleccionado]}", key=f"guardar_{jugador_id}_{test_seleccionado}"):
-        actualizar_valor(jugador_id, test_seleccionado, valor, fecha_hoy)
-        st.success(f"✅ {etiquetas[test_seleccionado]} guardado para {nombre}.")
+# Filtrado de jugadores por categoría
+st.subheader("Buscar jugadores por categoría (opcional)")
+categorias = sorted(df_jugadores['categoria_origen'].unique())
+categoria_filtrada = st.selectbox("Filtrar jugadores para facilitar la búsqueda", ["Todas"] + categorias)
+
+if categoria_filtrada != "Todas":
+    df_visible = df_jugadores[df_jugadores['categoria_origen'] == categoria_filtrada]
+else:
+    df_visible = df_jugadores.copy()
+
+# Inicialización de sesión para guardar selecciones
+if "jugadores_seleccionados" not in st.session_state:
+    st.session_state.jugadores_seleccionados = set()
+
+# Multiselección y acumulación
+jugadores_dict = {f"{row['jugador_nombre']} (ID: {row['jugador_id']})": row['jugador_id'] for _, row in df_visible.iterrows()}
+jugadores_elegidos = st.multiselect("Selecciona los jugadores para este test", list(jugadores_dict.keys()))
+
+if st.button("Agregar a la selección"):
+    for jugador in jugadores_elegidos:
+        st.session_state.jugadores_seleccionados.add(jugador)
+    st.success("Jugadores agregados correctamente.")
+
+# Confirmación final
+if st.button("✅ Confirmar selección de jugadores"):
+    st.session_state.confirmado = True
+
+# Mostrar formularios de ingreso de datos
+if st.session_state.get("confirmado"):
+    st.subheader(test_etiqueta)
+
+    id_lookup = {f"{row['jugador_nombre']} (ID: {row['jugador_id']})": row['jugador_id'] for _, row in df_jugadores.iterrows()}
+    reverse_lookup = {v: k for k, v in id_lookup.items()}
+
+    for jugador_key in sorted(st.session_state.jugadores_seleccionados):
+        jugador_id = id_lookup.get(jugador_key)
+        nombre = reverse_lookup.get(jugador_id)
+
+        st.markdown(f"**{nombre}**")
+        valor = st.number_input(f"{test_etiqueta}", key=jugador_id, min_value=0.0, value=0.0)
+
+        if st.button(f"Guardar {test_etiqueta}", key=f"guardar_{jugador_id}"):
+            # Buscar o crear fila
+            fecha = date.today().strftime("%Y-%m-%d")
+            fila_idx = None
+            for i, fila in enumerate(df_eval.to_dict(orient='records')):
+                if fila['jugador_id'] == jugador_id and fila['fecha_evaluacion'] == fecha:
+                    fila_idx = i + 2
+                    break
+            if fila_idx is None:
+                nueva = {
+                    'jugador_id': jugador_id,
+                    'fecha_evaluacion': fecha,
+                    'talla': "-", 'suma_pliegues': "-", 'salto_horizontal': "-", 'cmj': "-",
+                    'sprint_10_mts_seg': "-", 'sprint_20_mts_seg': "-", 'sprint_30_mts_seg': "-",
+                    'agilidad_505': "-", 'vel_lanzada': "-", 'vo2_max': "-",
+                    'pt_musculo': "-", 'pt_grasa': "-", 'comentario': ""
+                }
+                hoja_eval.append_row(list(nueva.values()))
+                fila_idx = len(hoja_eval.get_all_values())
+            col_idx = df_eval.columns.get_loc(test_columna) + 1
+            hoja_eval.update_cell(fila_idx, col_idx, valor)
+            st.success(f"{test_etiqueta} guardado para {nombre}.")
