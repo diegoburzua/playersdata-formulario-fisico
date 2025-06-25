@@ -22,8 +22,17 @@ hoja_eval = spreadsheet.worksheet("EvaluacionesFisicas")
 df_jugadores = pd.DataFrame(hoja_jugadores.get_all_records())
 df_jugadores.columns = df_jugadores.columns.str.strip().str.lower().str.replace(" ", "_")
 
-df_eval = pd.DataFrame(hoja_eval.get_all_records())
-df_eval.columns = df_eval.columns.str.strip().str.lower().str.replace(" ", "_")
+records_eval = hoja_eval.get_all_records()
+df_eval = pd.DataFrame(records_eval)
+
+if not df_eval.empty:
+    df_eval.columns = df_eval.columns.astype(str).str.strip().str.lower().str.replace(" ", "_")
+else:
+    df_eval = pd.DataFrame(columns=[
+        'jugador_id', 'fecha_evaluacion', 'talla', 'suma_pliegues', 'salto_horizontal', 'cmj',
+        'sprint_10_mts_seg', 'sprint_20_mts_seg', 'sprint_30_mts_seg',
+        'agilidad_505', 'vel_lanzada', 'vo2_max', 'pt_musculo', 'pt_grasa', 'comentario'
+    ])
 
 # Título
 st.title("Ingreso de Evaluaciones Físicas")
@@ -69,7 +78,14 @@ def actualizar_valor(columna, valor):
     if fila_idx is None:
         fila_idx = crear_nueva_fila(jugador_id, fecha_eval)
         df_eval = pd.DataFrame(hoja_eval.get_all_records())
-        df_eval.columns = df_eval.columns.str.strip().str.lower().str.replace(" ", "_")
+        if not df_eval.empty:
+            df_eval.columns = df_eval.columns.astype(str).str.strip().str.lower().str.replace(" ", "_")
+        else:
+            df_eval = pd.DataFrame(columns=[
+                'jugador_id', 'fecha_evaluacion', 'talla', 'suma_pliegues', 'salto_horizontal', 'cmj',
+                'sprint_10_mts_seg', 'sprint_20_mts_seg', 'sprint_30_mts_seg',
+                'agilidad_505', 'vel_lanzada', 'vo2_max', 'pt_musculo', 'pt_grasa', 'comentario'
+            ])
     col_idx = df_eval.columns.get_loc(columna) + 1
     hoja_eval.update_cell(fila_idx, col_idx, valor)
     fila_actual = df_eval.iloc[fila_idx - 2]
