@@ -25,10 +25,6 @@ df_jugadores.columns = df_jugadores.columns.str.strip().str.lower().str.replace(
 df_eval = pd.DataFrame(hoja_eval.get_all_records())
 df_eval.columns = df_eval.columns.str.strip().str.lower().str.replace(" ", "_")
 
-# Debug opcional
-# st.write("Columnas jugadores:", df_jugadores.columns.tolist())
-# st.write("Columnas evaluaciones:", df_eval.columns.tolist())
-
 # Título
 st.title("Ingreso de Evaluaciones Físicas")
 
@@ -45,19 +41,18 @@ jugador_id = jugadores_dict[jugador_sel]
 # Fecha
 fecha_eval = st.date_input("Fecha de evaluación", value=date.today())
 
-# Buscar fila existente
+# Función para obtener fila existente
 def obtener_fila(jugador_id, fecha):
     for i, fila in enumerate(df_eval.to_dict(orient='records')):
         if fila['jugador_id'] == jugador_id and fila['fecha_evaluacion'] == fecha.strftime("%Y-%m-%d"):
             return i + 2  # +2 por encabezado y 1-indexing
     return None
 
-# Insertar fila nueva si no existe
-fila_idx = obtener_fila(jugador_id, fecha_eval)
-if fila_idx is None:
+# Función para crear nueva fila si no existe
+def crear_nueva_fila(jugador_id, fecha):
     nueva_fila = {
         'jugador_id': jugador_id,
-        'fecha_evaluacion': fecha_eval.strftime("%Y-%m-%d"),
+        'fecha_evaluacion': fecha.strftime("%Y-%m-%d"),
         'talla': 0,
         'suma_pliegues': 0, 'salto_horizontal': 0, 'cmj': 0,
         'sprint_10_mts_seg': 0, 'sprint_20_mts_seg': 0, 'sprint_30_mts_seg': 0,
@@ -65,16 +60,28 @@ if fila_idx is None:
         'pt_musculo': 0, 'pt_grasa': 0, 'comentario': ""
     }
     hoja_eval.append_row(list(nueva_fila.values()))
-    df_eval = pd.concat([df_eval, pd.DataFrame([nueva_fila])], ignore_index=True)
-    fila_idx = obtener_fila(jugador_id, fecha_eval)
+    return obtener_fila(jugador_id, fecha)
 
-# Función para actualizar un valor
+# Función para actualizar un valor (crea fila si es necesario)
 def actualizar_valor(columna, valor):
+    global df_eval, fila_actual
+    fila_idx = obtener_fila(jugador_id, fecha_eval)
+    if fila_idx is None:
+        fila_idx = crear_nueva_fila(jugador_id, fecha_eval)
+        df_eval = pd.DataFrame(hoja_eval.get_all_records())
+        df_eval.columns = df_eval.columns.str.strip().str.lower().str.replace(" ", "_")
     col_idx = df_eval.columns.get_loc(columna) + 1
     hoja_eval.update_cell(fila_idx, col_idx, valor)
+    fila_actual = df_eval.iloc[fila_idx - 2]
 
-# Obtener fila actual
-fila_actual = df_eval.iloc[fila_idx - 2]
+# Obtener fila actual si existe
+fila_idx = obtener_fila(jugador_id, fecha_eval)
+fila_actual = df_eval.iloc[fila_idx - 2] if fila_idx else {
+    'talla': 0, 'suma_pliegues': 0, 'salto_horizontal': 0, 'cmj': 0,
+    'sprint_10_mts_seg': 0, 'sprint_20_mts_seg': 0, 'sprint_30_mts_seg': 0,
+    'agilidad_505': 0, 'vel_lanzada': 0, 'vo2_max': 0,
+    'pt_musculo': 0, 'pt_grasa': 0, 'comentario': ""
+}
 
 # Campos físicos
 campos = [
