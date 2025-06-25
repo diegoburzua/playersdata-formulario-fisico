@@ -18,9 +18,16 @@ spreadsheet = client.open_by_key(SPREADSHEET_KEY)
 hoja_jugadores = spreadsheet.worksheet("Jugadores")
 hoja_eval = spreadsheet.worksheet("EvaluacionesFisicas")
 
-# Convertir a DataFrames
+# Convertir a DataFrames y normalizar columnas
 df_jugadores = pd.DataFrame(hoja_jugadores.get_all_records())
+df_jugadores.columns = df_jugadores.columns.str.strip().str.lower().str.replace(" ", "_")
+
 df_eval = pd.DataFrame(hoja_eval.get_all_records())
+df_eval.columns = df_eval.columns.str.strip().str.lower().str.replace(" ", "_")
+
+# Debug opcional
+# st.write("Columnas jugadores:", df_jugadores.columns.tolist())
+# st.write("Columnas evaluaciones:", df_eval.columns.tolist())
 
 # Título
 st.title("Ingreso de Evaluaciones Físicas")
