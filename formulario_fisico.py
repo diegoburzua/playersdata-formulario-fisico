@@ -66,8 +66,7 @@ else:
 # Multiselect con todos los jugadores disponibles
 jugadores_dict = {f"{row['jugador_nombre']} (ID: {row['jugador_id']}) [{row['categoria_origen']}]": row['jugador_id'] for _, row in df_jugadores.iterrows()}
 
-jugadores_sel = st.multiselect("Selecciona los jugadores para este test", jugadores_dict.keys(),
-                                default=[f"{row['jugador_nombre']} (ID: {row['jugador_id']}) [{row['categoria_origen']}]" for _, row in sugeridos.iterrows()])
+jugadores_sel = st.multiselect("Selecciona los jugadores para este test", jugadores_dict.keys())
 
 # Funciones
 def obtener_fila(jugador_id, fecha):
