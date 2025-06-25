@@ -53,17 +53,21 @@ tipo_test = st.selectbox("Selecciona el bloque de test", list(tests_dict.keys())
 tests_disponibles = tests_dict[tipo_test]
 test_seleccionado = st.selectbox("Selecciona el test a realizar", tests_disponibles, format_func=lambda x: etiquetas[x])
 
-# Filtro para buscar jugadores más fácilmente
+# Filtro de búsqueda por categoría (no restringe la selección)
+st.markdown("### Buscar jugadores por categoría (opcional)")
 categorias = sorted(df_jugadores["categoria_origen"].unique())
-categoria_filtro = st.selectbox("Filtrar jugadores por categoría (opcional)", ["Todas"] + categorias)
+categoria_filtro = st.selectbox("Filtrar jugadores para facilitar la búsqueda", ["Todas"] + categorias)
 
 if categoria_filtro != "Todas":
-    df_filtrado = df_jugadores[df_jugadores["categoria_origen"] == categoria_filtro]
+    sugeridos = df_jugadores[df_jugadores["categoria_origen"] == categoria_filtro]
 else:
-    df_filtrado = df_jugadores
+    sugeridos = df_jugadores
 
-jugadores_dict = {f"{row['jugador_nombre']} (ID: {row['jugador_id']}) [{row['categoria_origen']}]": row['jugador_id'] for _, row in df_filtrado.iterrows()}
-jugadores_sel = st.multiselect("Selecciona los jugadores", jugadores_dict.keys())
+# Multiselect con todos los jugadores disponibles
+jugadores_dict = {f"{row['jugador_nombre']} (ID: {row['jugador_id']}) [{row['categoria_origen']}]": row['jugador_id'] for _, row in df_jugadores.iterrows()}
+
+jugadores_sel = st.multiselect("Selecciona los jugadores para este test", jugadores_dict.keys(),
+                                default=[f"{row['jugador_nombre']} (ID: {row['jugador_id']}) [{row['categoria_origen']}]" for _, row in sugeridos.iterrows()])
 
 # Funciones
 def obtener_fila(jugador_id, fecha):
