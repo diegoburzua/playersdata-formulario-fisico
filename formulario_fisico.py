@@ -18,10 +18,11 @@ spreadsheet = client.open_by_key(SPREADSHEET_KEY)
 hoja_jugadores = spreadsheet.worksheet("Jugadores")
 hoja_eval = spreadsheet.worksheet("EvaluacionesFisicas")
 
-# Convertir a DataFrames y normalizar columnas
+# Jugadores
 df_jugadores = pd.DataFrame(hoja_jugadores.get_all_records())
 df_jugadores.columns = df_jugadores.columns.str.strip().str.lower().str.replace(" ", "_")
 
+# Evaluaciones
 records_eval = hoja_eval.get_all_records()
 df_eval = pd.DataFrame(records_eval)
 
@@ -54,50 +55,53 @@ fecha_eval = st.date_input("Fecha de evaluación", value=date.today())
 def obtener_fila(jugador_id, fecha):
     for i, fila in enumerate(df_eval.to_dict(orient='records')):
         if fila['jugador_id'] == jugador_id and fila['fecha_evaluacion'] == fecha.strftime("%Y-%m-%d"):
-            return i + 2  # +2 por encabezado y 1-indexing
+            return i + 2  # +2: encabezado + 1-indexing
     return None
 
-# Función para crear nueva fila si no existe
+# Función para crear fila y retornar índice
 def crear_nueva_fila(jugador_id, fecha):
     nueva_fila = {
         'jugador_id': jugador_id,
         'fecha_evaluacion': fecha.strftime("%Y-%m-%d"),
-        'talla': 0,
-        'suma_pliegues': 0, 'salto_horizontal': 0, 'cmj': 0,
+        'talla': 0, 'suma_pliegues': 0, 'salto_horizontal': 0, 'cmj': 0,
         'sprint_10_mts_seg': 0, 'sprint_20_mts_seg': 0, 'sprint_30_mts_seg': 0,
         'agilidad_505': 0, 'vel_lanzada': 0, 'vo2_max': 0,
         'pt_musculo': 0, 'pt_grasa': 0, 'comentario': ""
     }
     hoja_eval.append_row(list(nueva_fila.values()))
-    return obtener_fila(jugador_id, fecha)
+    
+    # Actualizar df_eval global
+    global df_eval
+    df_eval = pd.DataFrame(hoja_eval.get_all_records())
+    df_eval.columns = df_eval.columns.astype(str).str.strip().str.lower().str.replace(" ", "_")
+    
+    # Índice seguro: última fila
+    return len(hoja_eval.get_all_values())
 
-# Función para actualizar un valor (crea fila si es necesario)
+# Función para actualizar valor
 def actualizar_valor(columna, valor):
     global df_eval, fila_actual
     fila_idx = obtener_fila(jugador_id, fecha_eval)
     if fila_idx is None:
         fila_idx = crear_nueva_fila(jugador_id, fecha_eval)
-        df_eval = pd.DataFrame(hoja_eval.get_all_records())
-        if not df_eval.empty:
-            df_eval.columns = df_eval.columns.astype(str).str.strip().str.lower().str.replace(" ", "_")
-        else:
-            df_eval = pd.DataFrame(columns=[
-                'jugador_id', 'fecha_evaluacion', 'talla', 'suma_pliegues', 'salto_horizontal', 'cmj',
-                'sprint_10_mts_seg', 'sprint_20_mts_seg', 'sprint_30_mts_seg',
-                'agilidad_505', 'vel_lanzada', 'vo2_max', 'pt_musculo', 'pt_grasa', 'comentario'
-            ])
+
     col_idx = df_eval.columns.get_loc(columna) + 1
     hoja_eval.update_cell(fila_idx, col_idx, valor)
+
+    # Actualizar fila actual
     fila_actual = df_eval.iloc[fila_idx - 2]
 
-# Obtener fila actual si existe
+# Cargar fila actual (si existe) o valores en blanco
 fila_idx = obtener_fila(jugador_id, fecha_eval)
-fila_actual = df_eval.iloc[fila_idx - 2] if fila_idx else {
-    'talla': 0, 'suma_pliegues': 0, 'salto_horizontal': 0, 'cmj': 0,
-    'sprint_10_mts_seg': 0, 'sprint_20_mts_seg': 0, 'sprint_30_mts_seg': 0,
-    'agilidad_505': 0, 'vel_lanzada': 0, 'vo2_max': 0,
-    'pt_musculo': 0, 'pt_grasa': 0, 'comentario': ""
-}
+if fila_idx:
+    fila_actual = df_eval.iloc[fila_idx - 2]
+else:
+    fila_actual = {
+        'talla': 0, 'suma_pliegues': 0, 'salto_horizontal': 0, 'cmj': 0,
+        'sprint_10_mts_seg': 0, 'sprint_20_mts_seg': 0, 'sprint_30_mts_seg': 0,
+        'agilidad_505': 0, 'vel_lanzada': 0, 'vo2_max': 0,
+        'pt_musculo': 0, 'pt_grasa': 0, 'comentario': ""
+    }
 
 # Campos físicos
 campos = [
@@ -116,8 +120,8 @@ campos = [
 ]
 
 for campo, etiqueta in campos:
-    valor = st.number_input(etiqueta, min_value=0.0, value=float(fila_actual[campo]))
-    if st.button(f"💾 Guardar {etiqueta}"):
+    valor = st.number_input(etiqueta, min_value=0.0, value=float(fila_actual[campo]), key=campo)
+    if st.button(f"💾 Guardar {etiqueta}", key=f"guardar_{campo}"):
         actualizar_valor(campo, valor)
         st.success(f"✅ {etiqueta} guardado.")
 
