@@ -20,7 +20,10 @@ hoja_eval = spreadsheet.worksheet("EvaluacionesFisicas")
 
 # Convertir a DataFrames
 df_jugadores = pd.DataFrame(hoja_jugadores.get_all_records())
+st.subheader("Debug - Jugadores")
 st.write("Columnas de df_jugadores:", df_jugadores.columns.tolist())
+st.dataframe(df_jugadores.head())
+#
 df_eval = pd.DataFrame(hoja_eval.get_all_records())
 
 # Título
